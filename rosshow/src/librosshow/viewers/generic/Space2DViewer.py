@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import threading
 
 import librosshow.termgraphics as termgraphics
 
@@ -27,6 +28,7 @@ class Space2DViewer(object):
 
         # Most recent ROS message
         self.msg = None
+        self.msg_lock = threading.Lock()
 
         # Last time terminal shape was updated
         self.last_update_shape_time = 0
@@ -58,7 +60,10 @@ class Space2DViewer(object):
             self.target_time = time.time()
 
     def update(self, msg):
-        self.msg = msg
+        # Discard messages that are too late to process.
+        if self.msg_lock.acquire(False):
+            self.msg = msg
+            self.msg_lock.release()
 
     def draw(self):
         if not self.msg:
@@ -94,7 +99,9 @@ class Space2DViewer(object):
         xmax = self.scale
         ymax = self.scale * h/w
 
-        for command_type, color, data in self.msg_decoder(self.msg):
+        with self.msg_lock:
+            draw_commands = self.msg_decoder(self.msg)
+        for command_type, color, data in draw_commands:
             if command_type == Space2DViewer.COMMAND_TYPE_POINTS:
                 self.canvas.set_color(color)
                 x = data[:,0]
